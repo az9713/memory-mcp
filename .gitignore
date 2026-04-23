@@ -1,0 +1,36 @@
+__pycache__/
+*.pyc
+*.pyo
+.python-version
+*.egg-info/
+dist/
+build/
+
+# Database (personal, not shared)
+*.db
+*.db-shm
+*.db-wal
+
+# Model cache
+.cache/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# The cloned research repos (large, not part of this project)
+mempalace/
+claudesidian/
+mem0/
+
+# Misc local files
+.ignore/
+gpt5_summary.txt
+memory_injection.jpg
+memory_stack.jpg
+memory_stack_explained.txt

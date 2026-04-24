@@ -144,6 +144,7 @@ CREATE TABLE memories (
     id            TEXT PRIMARY KEY,   -- UUID
     content       TEXT NOT NULL,
     tier          TEXT NOT NULL,      -- 'core' | 'warm' | 'ephemeral'
+    scope         TEXT NOT NULL,      -- default 'global'
     importance    REAL NOT NULL,      -- 0.0 – 1.0
     created_at    REAL NOT NULL,      -- Unix timestamp
     last_accessed REAL NOT NULL       -- reset on every recall
@@ -158,6 +159,13 @@ CREATE VIRTUAL TABLE mem_vss USING vec0(
 `recall` over-fetches 3× the requested limit by vector distance, then re-ranks by the full decay score. This prevents a very recent but tangential memory from beating a slightly older but highly relevant one on raw distance alone.
 
 Ephemeral memories not accessed in 7 days are pruned on server startup.
+
+### Schema migrations
+
+The server now tracks schema changes in a `schema_migrations` table and applies
+pending migrations automatically at startup. The initial migration (`001`)
+creates `memories` and `mem_vss`. Re-running startup is idempotent: previously
+applied versions are skipped.
 
 ---
 

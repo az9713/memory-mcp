@@ -17,7 +17,7 @@ import sqlite3
 import struct
 import time
 import uuid
-from typing import Optional
+from typing import Callable, Optional
 
 import sqlite_vec
 from mcp.server.fastmcp import FastMCP
@@ -33,6 +33,7 @@ EMBEDDING_DIM = 384
 HALF_LIFE = {"core": float("inf"), "warm": 30.0, "ephemeral": 2.0}
 VALID_TIERS = {"core", "warm", "ephemeral"}
 PRUNE_AFTER_DAYS = 7  # delete ephemeral not accessed in this many days
+CURRENT_SCHEMA_VERSION = 2
 
 # ---------------------------------------------------------------------------
 # Embedding model (lazy — first call downloads ~80 MB to ~/.cache/)
@@ -64,6 +65,74 @@ def serialize(v: list[float]) -> bytes:
 _db: Optional[sqlite3.Connection] = None
 
 
+def _ensure_migrations_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version    INTEGER PRIMARY KEY,
+            applied_at REAL NOT NULL
+        )
+        """
+    )
+
+
+def _get_schema_version(conn: sqlite3.Connection) -> int:
+    row = conn.execute("SELECT MAX(version) AS version FROM schema_migrations").fetchone()
+    return int(row["version"] or 0)
+
+
+def _migration_001_initial(conn: sqlite3.Connection) -> None:
+    conn.executescript(f"""
+        CREATE TABLE IF NOT EXISTS memories (
+            id            TEXT PRIMARY KEY,
+            content       TEXT NOT NULL,
+            tier          TEXT NOT NULL,
+            importance    REAL NOT NULL DEFAULT 0.5,
+            created_at    REAL NOT NULL,
+            last_accessed REAL NOT NULL
+        );
+        CREATE VIRTUAL TABLE IF NOT EXISTS mem_vss USING vec0(
+            embedding float[{EMBEDDING_DIM}]
+        );
+    """)
+
+
+def _column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return any(row["name"] == column for row in rows)
+
+
+def _migration_002_add_scope(conn: sqlite3.Connection) -> None:
+    if not _column_exists(conn, "memories", "scope"):
+        conn.execute("ALTER TABLE memories ADD COLUMN scope TEXT NOT NULL DEFAULT 'global'")
+    conn.execute("UPDATE memories SET scope = 'global' WHERE scope IS NULL")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memories_scope_tier_last_accessed"
+        " ON memories(scope, tier, last_accessed)"
+    )
+
+
+MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
+    1: _migration_001_initial,
+    2: _migration_002_add_scope,
+}
+
+
+def _apply_migrations(conn: sqlite3.Connection) -> None:
+    _ensure_migrations_table(conn)
+    current = _get_schema_version(conn)
+    for version in range(current + 1, CURRENT_SCHEMA_VERSION + 1):
+        migration = MIGRATIONS.get(version)
+        if migration is None:
+            raise RuntimeError(f"missing migration for schema version {version}")
+        migration(conn)
+        conn.execute(
+            "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+            (version, time.time()),
+        )
+    conn.commit()
+
+
 def db() -> sqlite3.Connection:
     global _db
     if _db is None:
@@ -73,20 +142,7 @@ def db() -> sqlite3.Connection:
         conn.enable_load_extension(True)
         sqlite_vec.load(conn)
         conn.enable_load_extension(False)
-        conn.executescript(f"""
-            CREATE TABLE IF NOT EXISTS memories (
-                id            TEXT PRIMARY KEY,
-                content       TEXT NOT NULL,
-                tier          TEXT NOT NULL,
-                importance    REAL NOT NULL DEFAULT 0.5,
-                created_at    REAL NOT NULL,
-                last_accessed REAL NOT NULL
-            );
-            CREATE VIRTUAL TABLE IF NOT EXISTS mem_vss USING vec0(
-                embedding float[{EMBEDDING_DIM}]
-            );
-        """)
-        conn.commit()
+        _apply_migrations(conn)
         _prune(conn)
         _db = conn
     return _db

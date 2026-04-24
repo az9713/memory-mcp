@@ -84,6 +84,7 @@ Everything lives in a single SQLite file at `~/.claude/memory.db`. Two tables:
 | `id` | TEXT | UUID, primary key |
 | `content` | TEXT | The stored fact |
 | `tier` | TEXT | `core`, `warm`, or `ephemeral` |
+| `scope` | TEXT | Memory namespace, default `global` |
 | `importance` | REAL | 0.0 – 1.0 |
 | `created_at` | REAL | Unix timestamp, never changes |
 | `last_accessed` | REAL | Unix timestamp, updated on every recall |

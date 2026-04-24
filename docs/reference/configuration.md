@@ -123,6 +123,25 @@ PRUNE_AFTER_DAYS = 999999
 
 ---
 
+### `CURRENT_SCHEMA_VERSION`
+
+```python
+CURRENT_SCHEMA_VERSION = 2
+```
+
+**Type:** integer
+**Default:** `2`
+
+The highest database schema migration version the server expects. On startup,
+the server checks `schema_migrations` and applies any missing versions up to
+this value.
+
+Only increase this when you add a new migration entry in `memory_server.py`.
+If this number is increased without a corresponding migration function, startup
+fails with a missing migration error.
+
+---
+
 ## Environment
 
 No environment variables are read by `memory_server.py`. All configuration is in the source file.

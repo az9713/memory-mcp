@@ -14,6 +14,7 @@ Store a new memory.
 |-----------|------|---------|-------------|
 | `content` | string | required | The text to store. Any length; no formatting required. |
 | `tier` | string | `"warm"` | One of `"core"`, `"warm"`, `"ephemeral"`. Controls decay. |
+| `scope` | string | `"global"` | Memory namespace. Use different values to isolate projects/agents. |
 | `importance` | float | `0.5` | 0.0 to 1.0. Scales the decay score — higher importance resists fading. |
 
 ### Returns
@@ -71,6 +72,7 @@ Search memories by semantic meaning and return the best matches.
 |-----------|------|---------|-------------|
 | `query` | string | required | Natural language search query. |
 | `limit` | integer | `5` | Max results to return. Clamped to 1–20. |
+| `scope` | string | `"global"` | Search only within this memory namespace. |
 
 ### Returns
 
@@ -156,6 +158,7 @@ List all stored memories, optionally filtered by tier, sorted by vitality.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `tier` | string or null | `null` | Filter to `"core"`, `"warm"`, or `"ephemeral"`. Omit for all tiers. |
+| `scope` | string | `"global"` | List memories only in this namespace. |
 
 ### Returns
 
@@ -192,9 +195,9 @@ A list of all matching memories, sorted by `vitality` descending (most alive fir
 
 ### Example
 
-> "Show me everything you remember about me."
+> "Show me everything you remember about me in the project-a scope."
 
-Claude calls `memories()` with no filter and presents the full list.
+Claude calls `memories(scope="project-a")` and presents that scoped list.
 
 > "What are my core memories?"
 

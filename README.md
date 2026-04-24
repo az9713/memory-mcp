@@ -173,10 +173,10 @@ applied versions are skipped.
 
 | Tool | What it does |
 |------|-------------|
-| `remember(content, tier, importance)` | Store a memory |
-| `recall(query, limit)` | Semantic search with decay ranking |
+| `remember(content, tier, importance, scope)` | Store a memory |
+| `recall(query, limit, scope)` | Semantic search with decay ranking |
 | `forget(memory_id)` | Delete permanently by ID |
-| `memories(tier)` | List all, sorted by vitality |
+| `memories(tier, scope)` | List all in a scope, sorted by vitality |
 
 ---
 

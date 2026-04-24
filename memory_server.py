@@ -181,7 +181,7 @@ mcp = FastMCP("memory")
 
 
 @mcp.tool()
-def remember(content: str, tier: str = "warm", importance: float = 0.5) -> dict:
+def remember(content: str, tier: str = "warm", importance: float = 0.5, scope: str = "global") -> dict:
     """
     Store a memory.
 
@@ -196,6 +196,8 @@ def remember(content: str, tier: str = "warm", importance: float = 0.5) -> dict:
         return {"stored": False, "error": f"tier must be one of {sorted(VALID_TIERS)}"}
     if not content or not content.strip():
         return {"stored": False, "error": "content cannot be empty"}
+    if not scope or not scope.strip():
+        return {"stored": False, "error": "scope cannot be empty"}
     importance = max(0.0, min(1.0, float(importance)))
 
     mem_id = str(uuid.uuid4())
@@ -204,9 +206,9 @@ def remember(content: str, tier: str = "warm", importance: float = 0.5) -> dict:
 
     conn = db()
     cur = conn.execute(
-        "INSERT INTO memories (id, content, tier, importance, created_at, last_accessed)"
-        " VALUES (?, ?, ?, ?, ?, ?)",
-        (mem_id, content.strip(), tier, importance, now, now),
+        "INSERT INTO memories (id, content, tier, scope, importance, created_at, last_accessed)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (mem_id, content.strip(), tier, scope.strip(), importance, now, now),
     )
     conn.execute(
         "INSERT INTO mem_vss (rowid, embedding) VALUES (?, ?)",
@@ -214,17 +216,19 @@ def remember(content: str, tier: str = "warm", importance: float = 0.5) -> dict:
     )
     conn.commit()
 
-    return {"id": mem_id, "tier": tier, "importance": importance, "stored": True}
+    return {"id": mem_id, "tier": tier, "scope": scope.strip(), "importance": importance, "stored": True}
 
 
 @mcp.tool()
-def recall(query: str, limit: int = 5) -> list:
+def recall(query: str, limit: int = 5, scope: str = "global") -> list:
     """
     Semantic search across all memories, ranked by relevance × importance × decay.
     Recalling a memory resets its last_accessed clock, keeping it alive.
     Returns up to `limit` results (max 20).
     """
     if not query or not query.strip():
+        return []
+    if not scope or not scope.strip():
         return []
     limit = max(1, min(20, int(limit)))
     fetch = limit * 3  # over-fetch for decay re-ranking
@@ -234,14 +238,14 @@ def recall(query: str, limit: int = 5) -> list:
 
     rows = conn.execute(
         """
-        SELECT m.id, m.content, m.tier, m.importance, m.last_accessed, m.rowid,
+        SELECT m.id, m.content, m.tier, m.scope, m.importance, m.last_accessed, m.rowid,
                v.distance
         FROM mem_vss v
         JOIN memories m ON m.rowid = v.rowid
-        WHERE v.embedding MATCH ? AND k = ?
+        WHERE v.embedding MATCH ? AND k = ? AND m.scope = ?
         ORDER BY v.distance
         """,
-        (serialize(q_vec), fetch),
+        (serialize(q_vec), fetch, scope.strip()),
     ).fetchall()
 
     # unit vectors: cosine_similarity = 1 - L2_distance² / 2
@@ -261,7 +265,13 @@ def recall(query: str, limit: int = 5) -> list:
     conn.commit()
 
     return [
-        {"id": r["id"], "content": r["content"], "tier": r["tier"], "score": round(s, 4)}
+        {
+            "id": r["id"],
+            "content": r["content"],
+            "tier": r["tier"],
+            "scope": r["scope"],
+            "score": round(s, 4),
+        }
         for s, r in top
     ]
 
@@ -280,23 +290,29 @@ def forget(memory_id: str) -> dict:
 
 
 @mcp.tool()
-def memories(tier: Optional[str] = None) -> list:
+def memories(tier: Optional[str] = None, scope: str = "global") -> list:
     """
     List all stored memories, optionally filtered by tier ('core', 'warm', 'ephemeral').
     Sorted by vitality (importance × decay) so the most alive memories appear first.
     """
     if tier is not None and tier not in VALID_TIERS:
         return []
+    if not scope or not scope.strip():
+        return []
 
     conn = db()
+    scope = scope.strip()
     if tier:
         rows = conn.execute(
-            "SELECT id, content, tier, importance, last_accessed FROM memories WHERE tier = ?",
-            (tier,),
+            "SELECT id, content, tier, scope, importance, last_accessed"
+            " FROM memories WHERE tier = ? AND scope = ?",
+            (tier, scope),
         ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT id, content, tier, importance, last_accessed FROM memories"
+            "SELECT id, content, tier, scope, importance, last_accessed"
+            " FROM memories WHERE scope = ?",
+            (scope,),
         ).fetchall()
 
     now = time.time()
@@ -311,6 +327,7 @@ def memories(tier: Optional[str] = None) -> list:
                 "id": r["id"],
                 "content": r["content"],
                 "tier": r["tier"],
+                "scope": r["scope"],
                 "importance": r["importance"],
                 "age_days": round(age_days, 1),
                 "vitality": vitality,

@@ -159,6 +159,13 @@ CREATE VIRTUAL TABLE mem_vss USING vec0(
 
 Ephemeral memories not accessed in 7 days are pruned on server startup.
 
+### Schema migrations
+
+The server now tracks schema changes in a `schema_migrations` table and applies
+pending migrations automatically at startup. The initial migration (`001`)
+creates `memories` and `mem_vss`. Re-running startup is idempotent: previously
+applied versions are skipped.
+
 ---
 
 ## Four tools

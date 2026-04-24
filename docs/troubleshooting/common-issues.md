@@ -115,3 +115,17 @@ If the download keeps failing, check your internet connection or configure a Hug
 **Cause:** The content string was empty or only whitespace.
 
 **Fix:** Ensure the content has at least one non-whitespace character. If Claude is generating empty content, check the prompt — Claude may have misunderstood what to store.
+
+---
+
+## Startup fails with `missing migration for schema version X`
+
+**Cause:** `CURRENT_SCHEMA_VERSION` was increased, but a matching migration
+function was not added to the `MIGRATIONS` registry.
+
+**Fix:**
+
+1. Open `memory_server.py` and confirm every version up to
+   `CURRENT_SCHEMA_VERSION` has an entry in `MIGRATIONS`.
+2. Add the missing migration function and registry mapping.
+3. Restart Claude Code so the server starts with the updated code.
